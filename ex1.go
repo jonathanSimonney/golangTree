@@ -6,57 +6,19 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
+	"regexp"
+	"time"
 )
-
-//type IFileOrFolder interface{
-//	GetSize() int64
-//}
 
 type File struct {
 	Size int64
 	path string
+	Name string
 }
-//type Folder struct {
-//	Elems []IFileOrFolder
-//}
 
 func (this File) GetSize() int64 {
 	return this.Size
 }
-
-//func (this Folder) GetSize() int64 {
-//	var totalSize int64
-//	totalSize = 0
-//	for _, fileOrFolder := range this.Elems {
-//		totalSize += fileOrFolder.GetSize()
-//	}
-//
-//	return totalSize
-//}
-
-//func getFolderChildren(inputFile os.FileInfo, fileLoc string) []IFileOrFolder {
-//	filePath := fileLoc + "/" + inputFile.Name()
-//
-//	var children []IFileOrFolder
-//	files, err := ioutil.ReadDir(filePath)
-//	if err != nil {
-//		panic(err)
-//	}
-//
-//	for _, file := range files {
-//		if !file.IsDir(){
-//			children = append(children, File{
-//				file.Size(),
-//			})
-//		}else{
-//			children = append(children, Folder{
-//				getFolderChildren(file, filePath),
-//			})
-//		}
-//	}
-//
-//	return children
-//}
 
 func parseFolderFileChildren(inputFolder os.FileInfo, fileLoc string){
 	filePath := fileLoc + "/" + inputFolder.Name()
@@ -76,6 +38,7 @@ func parseFolderFileChildren(inputFolder os.FileInfo, fileLoc string){
 			onlyTenBiggerFile.appendFile(File{
 				file.Size(),
 				filePath + "/" + file.Name(),
+				file.Name(),
 			})
 		}else{
 			parseFolderFileChildren(file, filePath)
@@ -88,11 +51,16 @@ type onlyNBiggerFile struct{
 	files []File
 	min int64
 	max int64
+	nameRegexp regexp.Regexp
 }
 
 var onlyTenBiggerFile onlyNBiggerFile
 
 func (this *onlyNBiggerFile) appendFile(file File){
+	if !this.nameRegexp.MatchString(file.Name){
+		return
+	}
+
 	if file.Size <= this.min || (this.max > 0 && file.Size >= this.max){
 		return
 	}
@@ -112,6 +80,11 @@ func (this *onlyNBiggerFile) appendFile(file File){
 }
 
 func main() {
+	begin := time.Now()
+
+	var nameRegexpAsStr string
+	flag.StringVar(&nameRegexpAsStr, "nameRegexp", "", "regexp for the file name")
+
 	var path string
 	flag.StringVar(&path, "path", "", "Path to folder")
 
@@ -121,8 +94,20 @@ func main() {
 	var maxSize int64
 	flag.Int64Var(&maxSize, "max", -1, "Max size of file (won't be taken into account if negative)")
 
-	flag.Parse()
-	onlyTenBiggerFile = onlyNBiggerFile{10, make([]File, 0), minSize, maxSize}
+	//var contentRegexpAsStr string
+	//flag.StringVar(&nameRegexpAsStr, "nameRegexp", "", "regexp for the file content")
+
+	flag.Parse() //IMPORTANT!!!! DO NOT USE FLAG VARS BEFORE
+
+	fmt.Println(time.Since(begin))
+
+	nameRegexp, err := regexp.Compile(nameRegexpAsStr)
+
+	if (err != nil){
+		panic(err)
+	}
+
+	onlyTenBiggerFile = onlyNBiggerFile{10, make([]File, 0), minSize, maxSize, *nameRegexp}
 
 	files, err := ioutil.ReadDir(path)
 
@@ -136,11 +121,12 @@ func main() {
 			onlyTenBiggerFile.appendFile(File{
 				file.Size(),
 				path + "/" + file.Name(),
+				file.Name(),
 			})
 		} else {
 			parseFolderFileChildren(file, path)
 		}
 	}
 
-	fmt.Println(onlyTenBiggerFile)
+	fmt.Println(onlyTenBiggerFile, time.Since(begin))
 }
